@@ -555,9 +555,9 @@ static inline bool is_member_access_start(int32_t c) {
 }
 
 // Consumes one of the operators that join the names of a
-// parenthesis-free call's receiver: `.`, `?.`, `??.`, `*.`, `.&` and
-// `.@`, and clears `dot` unless it is `.`. Returns false, with input
-// consumed, on anything else.
+// parenthesis-free call's receiver: `.`, `?.`, `??.`, `*.`, `.&`, `.@`,
+// `?.@`, `??.@` and `*.@`, and clears `dot` unless it is `.`. Returns
+// false, with input consumed, on anything else.
 static bool read_member_access(TSLexer *lexer, bool *dot) {
     if (lexer->lookahead != '.') {
         *dot = false;
@@ -586,6 +586,9 @@ static bool read_member_access(TSLexer *lexer, bool *dot) {
         return false;
     }
     lexer->advance(lexer, false);
+    if (lexer->lookahead == '@') {
+        lexer->advance(lexer, false);
+    }
     return true;
 }
 
@@ -5278,6 +5281,9 @@ static bool parentheses_open_statement(TSLexer *lexer, bool no_close_ahead) {
                     if (dot) {
                         advance(lexer);
                     }
+                }
+                if (dot && lexer->lookahead == '@') {
+                    advance(lexer);
                 }
                 if (dot) {
                     state.operand = false;
