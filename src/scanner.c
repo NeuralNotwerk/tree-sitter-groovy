@@ -509,7 +509,7 @@ static inline bool contextual_word_may_start(
     int32_t c,
     const bool *valid_symbols
 );
-static bool slashy_body_follows(TSLexer *lexer);
+static bool slashy_body_follows(TSLexer *lexer, bool lines);
 static bool skip_string(TSLexer *lexer);
 static bool skip_short_string(TSLexer *lexer);
 static bool lambda_parameters_follow(
@@ -1177,7 +1177,7 @@ static bool parameters_follow(
             // (`foo a, /->/`, `{ foo a, b = /->/ }`), and a line break after
             // it ends the list as after any string (`foo a, /re/`).
             if (continued && lexer->lookahead != '='
-                && slashy_body_follows(lexer)) {
+                && slashy_body_follows(lexer, true)) {
                 advance(lexer);
                 continued = false;
                 element_start = false;
@@ -2985,7 +2985,7 @@ static bool next_line_continues(
 ) {
     int32_t c = lexer->lookahead;
     if (slash) {
-        return c == '=' || !slashy_body_follows(lexer);
+        return c == '=' || !slashy_body_follows(lexer, false);
     }
     if (lexer->eof(lexer)) {
         return false;
@@ -3908,7 +3908,7 @@ static bool membership_list_follows(TSLexer *lexer) {
         }
         if (slash) {
             if (state.operand && input->lookahead != '=') {
-                if (!slashy_body_follows(input)) {
+                if (!slashy_body_follows(input, true)) {
                     return false;
                 }
                 advance(input);
@@ -4018,7 +4018,7 @@ static bool next_line_paren_ends_cast(TSLexer *lexer, bool no_close_ahead) {
         }
         if (slash) {
             if (state.operand && input->lookahead != '=') {
-                if (!slashy_body_follows(input)) {
+                if (!slashy_body_follows(input, true)) {
                     return true;
                 }
                 advance(input);
@@ -4136,7 +4136,7 @@ static bool skip_closure_tokens(
                 }
                 slash_state_after_operator(&state);
             } else if (state.operand && input->lookahead != '=') {
-                if (slashy_body_follows(input)) {
+                if (slashy_body_follows(input, !yield)) {
                     advance(input);
                     slash_state_after_operand(&state);
                 } else if (yield && is_whitespace(input->lookahead)) {
@@ -4252,7 +4252,7 @@ static AccessRest read_closure_parentheses(
         // whole and the parentheses on to their `)`, so that an argument
         // after them is found (`foo { }.bar(/x/).baz 1`); stopping here
         // made the accesses a call and that argument a statement.
-        if (input->lookahead == '=' || !slashy_body_follows(input)) {
+        if (input->lookahead == '=' || !slashy_body_follows(input, true)) {
             return ACCESS_STOP;
         }
         advance(input);
@@ -4683,7 +4683,7 @@ static bool skip_lambda_tokens(
         }
         if (slash) {
             if (state.operand && lexer->lookahead != '=') {
-                if (!slashy_body_follows(lexer)) {
+                if (!slashy_body_follows(lexer, true)) {
                     return false;
                 }
                 advance(lexer);
@@ -5170,7 +5170,7 @@ static bool parentheses_open_statement(TSLexer *lexer, bool no_close_ahead) {
             // element's (`(text =~ /a, b/)`); one that does not close on its
             // line ends the reading.
             if (slash && state.operand && angles == 0 && c != '=') {
-                if (!slashy_body_follows(lexer)) {
+                if (!slashy_body_follows(lexer, true)) {
                     known = false;
                     break;
                 }
@@ -5517,8 +5517,9 @@ static const unsigned SLASHY_LOOKAHEAD_ESCAPED_SLASHES = 64;
 // neither empty nor starts with whitespace, and a closing `/` on the line
 // (looked for without keeping what is read), or
 // SLASHY_LOOKAHEAD_ESCAPED_SLASHES escaped slashes before the end of it.
-static bool slashy_body_follows(TSLexer *lexer) {
-    if (lexer->lookahead == '/' || is_whitespace(lexer->lookahead)) {
+static bool slashy_body_follows(TSLexer *lexer, bool lines) {
+    if (lexer->lookahead == '/'
+        || (!lines && is_whitespace(lexer->lookahead))) {
         return false;
     }
     unsigned escaped_slashes = 0;
@@ -5535,7 +5536,7 @@ static bool slashy_body_follows(TSLexer *lexer) {
         if (lexer->lookahead == '/') {
             return true;
         }
-        if (is_line_break(lexer->lookahead)) {
+        if (!lines && is_line_break(lexer->lookahead)) {
             return false;
         }
         advance(lexer);
@@ -5737,7 +5738,7 @@ static bool scan_lambda_body_end(
             }
         } else if (lexer->lookahead == '=' || !crossed_line
                    || !token_valid(valid_symbols, mode, STATEMENT_PAREN)
-                   || !slashy_body_follows(lexer)) {
+                   || !slashy_body_follows(lexer, false)) {
             // On the line of the `}` a `/` divides, as after any expression
             // (`x -> { a } /2/ 3`): Groovy's lexer starts no regex after a
             // `}`. A slashy string starts only the statement on a later line.
@@ -6644,7 +6645,7 @@ bool tree_sitter_groovy_external_scanner_scan(
                             lexer->lookahead == '*'
                             || (lexer->lookahead != '='
                                 && lexer->lookahead != '/'
-                                && slashy_body_follows(lexer));
+                                && slashy_body_follows(lexer, false));
                     }
                 }
             }
@@ -6706,7 +6707,7 @@ bool tree_sitter_groovy_external_scanner_scan(
     // token ends; advancing past it during the look-ahead does not extend
     // the token range as long as we do not call `mark_end` again.
     lexer->mark_end(lexer);
-    if (!slashy_body_follows(lexer)) {
+    if (!slashy_body_follows(lexer, !expression_ends)) {
         return false;
     }
     if (scanner != NULL) {

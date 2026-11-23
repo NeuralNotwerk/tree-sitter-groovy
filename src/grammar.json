@@ -13426,7 +13426,7 @@
           "members": [
             {
               "type": "PATTERN",
-              "value": "[^\\/\\\\$\\n\\r]"
+              "value": "[^\\/\\\\$]"
             },
             {
               "type": "PATTERN",

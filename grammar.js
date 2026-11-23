@@ -3963,7 +3963,7 @@ module.exports = grammar({
     // `'ab'`): without the pair a CRLF file left the `\n` after the
     // escaped `\r` to end the string.
     _slashy_text: _ => token.immediate(repeat1(choice(
-      /[^\/\\$\n\r]/,
+      /[^\/\\$]/,
       /\\(\r\n|[\s\S])/,
     ))),
 
