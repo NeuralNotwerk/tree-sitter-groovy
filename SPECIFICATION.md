@@ -1798,9 +1798,36 @@ mid-slashy.
 As implemented, the grammar's valid tokens stand in for `last_token`,
 and the scanner emits only SLASHY_STRING_START, after the `/`; the
 grammar reads the body and the closing `/`. The opener needs a body
-that is not empty, does not start with whitespace, and reaches a
-closing `/` on its line, an escaped character (`\/` among them) read as
-one (`slashy_body_follows`). That look-ahead runs from every `/` where
+that is not empty and reaches a closing `/`, an escaped character
+(`\/` among them) read as one (`slashy_body_follows`). Where no
+expression ends, which is where NOT_IN is not valid (an operand
+starts, below) or BODY_BLOCK_END is (after the `}` of an `if` or loop
+body, where Groovy's lexer reads a string too: `if (c) { a }` then
+`/ 2` on the next line), the body may start with whitespace and run
+across lines, as Groovy's `SlashyStringCharacter` takes both:
+`x = /a` then `b/` on the next line, and
+`s.replaceFirst(/ in [ \dms]+/, '')`. During error recovery, where
+every symbol is valid, the one-line rule holds, so a stray `/` does not
+turn the lines after it into string text (`x = a @@ / b` then
+`y = c / d`). A slashy string that is not closed yet, where an
+operand starts, runs on to the next unescaped `/` in the file, as
+Groovy's lexer reads it: `def r = /abc` then `def total = price / count`
+is the string `abc`, the line break and `def total = price` up to the
+`/`, then the statement `count`, with no `ERROR`, where a string that had to
+close on its line left one `ERROR` on the first line. In an editor a
+regex that is still being typed recolours the code up to the next `/`.
+Where a division may follow, the `/` starts a string only with a body that does not start with
+whitespace and closes on its line: a `/` that starts the next
+statement on a later line, after an expression (`next_line_continues`,
+§6.21), after a lambda body's `}` or after a comment and a line break,
+so that `a` then `/ 2` on the next line stays a division, and
+`yield / 2` in a closure a division by 2. After the keyword `in`,
+which decides itself by whether an expression follows (§6.16), no
+division may follow either, so there the `/` opens a string that starts
+with whitespace or runs across lines too (`x in / a/`), as Groovy's
+lexer reads it; `yield` keeps the one-line rule. The other look-aheads
+that read past a slashy string to the token after it take the
+multi-line body. That look-ahead runs from every `/` where
 a slashy string may start, which during error recovery is every `/`,
 and an escaped slash ends none of them, so a line of `\/` was read from
 each of its slashes to its end: 2,505 bytes read per input byte for
@@ -1812,15 +1839,24 @@ that many slashes before it: 1.0 and 6.0 bytes per input byte for the
 two lines at 100,000 bytes. Real regexes hold a few escaped slashes (at
 most five on a line of the Java set of 24,548 files, none in the
 Groovy set), and a slashy string that does close reads as before
-however many it holds. Past the bound a `/` with no closing `/` on its
-line is a slashy string whose `/` is missing, an `ERROR`, where it was
-division or another `ERROR`; on the line after a statement it starts
-the next statement rather than continuing the one before (§6.21).
+however many it holds, on one line or several. The look-ahead stops
+at the first unescaped `/`, so across lines too a character is read
+from the `/` before it only, and from at most the bound's slashes
+escaped. Past the bound the look-ahead takes the string to close
+without having found its `/`, so the one-line rule no longer holds
+there: the grammar reads the body on to the next unescaped `/` in the
+file, across lines and with no `ERROR`. `x = /` and a line of 70 `\/`,
+then `y = 1` and `z = a / b`, is a string that ends at the `/` of
+`z = a / b`, and then `b`, and the same line after `foo()` on the line before is a statement
+of its own (§6.21) that runs on as far. Groovy's lexer reads each of
+these as a string to the next `/`. Where no unescaped `/` follows, the
+string's `/` is missing, an `ERROR`.
 No tree of the corpus, the real and Java sets and 40,000 fuzzed lines
 of regexes with escaped slashes, long lines and division chains
 changed, but for the inputs with a line past the bound, all of which
 had an `ERROR` before and after (1,583 of 17,762).
-`bindings/rust/tests/slashy_string_cost.rs` checks the two lines.
+`bindings/rust/tests/slashy_string_cost.rs` checks the two lines, and
+the same across many lines.
 
 The valid tokens stand in for `last_token` only where an operand may
 start, and the grammar lets one start right after an operand: the next
